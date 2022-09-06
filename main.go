@@ -4,15 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/Azure/ARO-RP/pkg/util/arm"
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2018-06-01/compute"
-	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2018-02-01/resources"
 	mgmtfeatures "github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-07-01/features"
 
 	"github.com/Azure/go-autorest/autorest"
@@ -27,6 +23,9 @@ type rcWrapper struct {
 	rc   mgmtfeatures.ResourcesClient
 	sess *AzureSession
 }
+
+// This a somewhat modified version of the code from autorest. It returns a map[string]interface{} instead of
+// the object. Most of the code in main is just used to get account creds
 
 // GetByID gets a resource by ID.
 // Parameters:
@@ -48,6 +47,8 @@ func (client rcWrapper) GetByID(ctx context.Context, resourceID string, APIVersi
 		return nil, autorest.NewErrorWithError(err, "features.ResourcesClient", "GetByID", resp, "Failure sending request")
 	}
 	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		fmt.Println(string(b))
 		return nil, errors.New("not expected status code")
 	}
 
@@ -63,23 +64,6 @@ type AzureSession struct {
 	Authorizer     autorest.Authorizer
 }
 
-func readJSON(path string) (*map[string]interface{}, error) {
-	data, err := ioutil.ReadFile(path)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Can't open the file")
-	}
-
-	contents := make(map[string]interface{})
-	err = json.Unmarshal(data, &contents)
-
-	if err != nil {
-		err = errors.Wrap(err, "Can't unmarshal file")
-	}
-
-	return &contents, err
-}
-
 func newSessionFromFile() (*AzureSession, error) {
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
 
@@ -93,57 +77,6 @@ func newSessionFromFile() (*AzureSession, error) {
 	}
 
 	return &sess, nil
-}
-
-func getGroups(sess *AzureSession) ([]string, error) {
-	tab := make([]string, 0)
-	var err error
-
-	grClient := resources.NewGroupsClient(sess.SubscriptionID)
-	grClient.Authorizer = sess.Authorizer
-
-	for list, err := grClient.ListComplete(context.Background(), "", nil); list.NotDone(); err = list.Next() {
-		if err != nil {
-			return nil, errors.Wrap(err, "error traverising RG list")
-		}
-		rgName := *list.Value().ID
-		tab = append(tab, rgName)
-	}
-	return tab, err
-}
-
-func getVM(sess *AzureSession, rg string) string {
-	fmt.Println("get vm")
-
-	vmClient := compute.NewVirtualMachinesClient(sess.SubscriptionID)
-	vmClient.Authorizer = sess.Authorizer
-	vm, err := vmClient.Get(context.Background(), "jfacchet-rg", "test-jfacchet", compute.InstanceView)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(*vm.Name)
-	fmt.Println(*vm.ID)
-
-	for vm, err := vmClient.ListComplete(context.Background(), rg); vm.NotDone(); err = vm.Next() {
-		if err != nil {
-			log.Print("got error while traverising RG list: ", err)
-		}
-
-		i := vm.Value()
-		tags := []string{}
-		for k, v := range i.Tags {
-			tags = append(tags, fmt.Sprintf("%s?%s", k, *v))
-		}
-		tagsS := strings.Join(tags, "%")
-
-		if len(i.Tags) > 0 {
-			fmt.Printf("%s,%s,%s,<%s>\n", rg, *i.Name, *i.ID, tagsS)
-		} else {
-			fmt.Printf("%s,%s,%s\n", rg, *i.Name, *i.ID)
-		}
-	}
-	fmt.Println("done")
-	return *vm.ID
 }
 
 var fieldsToTransfer []string = []string{"id", "name", "type", "condition", "apiVersion", "dependsOn", "location", "tags", "copy", "comments"}
@@ -200,21 +133,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("getgroups")
-	groups, err := getGroups(sess)
-	fmt.Println(len(groups))
-
-	//fmt.Println(len(groups))
-
 	if err != nil {
 		fmt.Println("error 2")
 		fmt.Printf("%v\n", err)
 		os.Exit(1)
 	}
 
-	id := getVM(sess, "jfacchet-rg")
+	resource, err := rc.GetByID(context.Background(), fmt.Sprintf("/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/networkSecurityGroups/test-jfacchet-nsg", subID), "2022-05-01")
 
-	resource, err := rc.GetByID(context.Background(), id, "2022-08-01")
 	fmt.Println(err)
 	bytes := customMarshal(resource)
 	fmt.Println(string(bytes))
