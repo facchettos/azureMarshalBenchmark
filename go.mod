@@ -48,6 +48,7 @@ require (
 	golang.org/x/tools v0.1.13-0.20220812184215-3f9b119300de // indirect
 	golang.org/x/tools/gopls v0.9.4 // indirect
 	golang.org/x/vuln v0.0.0-20220725105440-4151a5aca1df // indirect
+	gotest.tools v2.2.0+incompatible // indirect
 	honnef.co/go/tools v0.3.2 // indirect
 	k8s.io/apimachinery v0.24.1 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect

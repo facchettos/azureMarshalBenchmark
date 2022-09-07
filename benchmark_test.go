@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/Azure/ARO-RP/pkg/util/arm"
@@ -82,26 +84,42 @@ func BenchmarkMarshalOnlyOld(b *testing.B) {
 }
 
 func TestResults(t *testing.T) {
-	sess, _ := newSessionFromFile()
-	rc := mgmtfeatures.NewResourcesClient(subID)
-	rc.Authorizer = sess.Authorizer
-
-	gr, err := rc.GetByID(context.Background(), fmt.Sprintf("/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Compute/virtualMachines/test-jfacchet", subID), "2022-08-01")
-	if err != nil {
-		fmt.Println(err)
+	tests := []struct {
+		resourceId string
+		apiversion string
+	}{
+		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Compute/virtualMachines/test-jfacchet", "2022-08-01"},
+		{"/subscriptions/%s/resourceGroups/JFACCHET-RG/providers/Microsoft.Compute/sshPublicKeys/test-jfacchet_key", "2022-08-01"},
+		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/publicIPAddresses/test-jfacchet-ip", "2022-05-01"},
+		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/networkSecurityGroups/test-jfacchet-nsg", "2022-05-01"},
+		//this fails because there is some dynamic guid in the result, which is constantly changing so the deep equal fails
+		//		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/networkInterfaces/test-jfacchet986", "2022-05-01"},
+		{"/subscriptions/%s/resourceGroups/JFACCHET-RG/providers/Microsoft.Compute/disks/test-jfacchet_OsDisk_1_da2eb7474ac94ffcba7416b463dabe10", "2022-07-02"},
 	}
 
-	resource := arm.Resource{
-		Resource: gr,
+	for _, tc := range tests {
+		t.Run(tc.resourceId, func(t *testing.T) {
+			gr, err := rcCurrent.GetByID(context.Background(), fmt.Sprintf(tc.resourceId, subID), tc.apiversion)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			resource := arm.Resource{
+				Resource: gr,
+			}
+			bytes, _ := resource.MarshalJSON()
+
+			mapCurrent := make(map[string]interface{})
+			json.Unmarshal(bytes, &mapCurrent)
+
+			bytes = rcWrapperGlobal.getAndMarshal(fmt.Sprintf(tc.resourceId, subID), tc.apiversion)
+
+			mapNew := make(map[string]interface{})
+			json.Unmarshal(bytes, &mapNew)
+
+			if !reflect.DeepEqual(mapCurrent, mapNew) {
+				t.Error()
+			}
+		})
 	}
-	bytes, _ := resource.MarshalJSON()
-	fmt.Println(string(bytes))
-	fmt.Println("")
-	rcW := rcWrapper{
-		rc:   mgmtfeatures.NewResourcesClient(subID),
-		sess: sess,
-	}
-	bytes = rcW.getAndMarshal(fmt.Sprintf("/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Compute/virtualMachines/test-jfacchet", subID), "2022-08-01")
-	fmt.Println(string(bytes))
-	fmt.Println("")
 }

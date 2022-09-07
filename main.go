@@ -106,7 +106,10 @@ func (rc rcWrapper) getAndMarshal(id, apiversion string) []byte {
 		return nil
 	}
 
-	return customMarshal(resource)
+	delete(resource, "etag")
+	bytes, _ := json.Marshal(resource)
+
+	return bytes
 }
 
 var subID string
