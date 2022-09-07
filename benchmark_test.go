@@ -88,6 +88,7 @@ func TestResults(t *testing.T) {
 		resourceId string
 		apiversion string
 	}{
+		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/virtualNetworks/jfacchet-rg-vnet", "2022-05-01"},
 		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Compute/virtualMachines/test-jfacchet", "2022-08-01"},
 		{"/subscriptions/%s/resourceGroups/JFACCHET-RG/providers/Microsoft.Compute/sshPublicKeys/test-jfacchet_key", "2022-08-01"},
 		{"/subscriptions/%s/resourceGroups/jfacchet-rg/providers/Microsoft.Network/publicIPAddresses/test-jfacchet-ip", "2022-05-01"},
